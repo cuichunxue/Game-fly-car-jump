@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0a0716">
+<meta name="description" content="標高2600mの星の頂から、崖の縁をドロップイン。垂直の壁を駆け降り、ジャンプ台から空へ。海抜0mの夕陽の港を目指す3Dダウンヒル・ドライブ。">
+<title>天空ドロップ・ロードスター</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Orbitron:wght@600;800;900&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage"></div>
+
+<!-- loading -->
+<div id="loading" class="loading">
+  <div class="load-logo">SKYDROP<span>ROADSTER</span></div>
+  <div class="load-bar"><b id="loadFill"></b></div>
+  <div class="load-txt" id="loadTxt">標高2600mへ運んでいます…</div>
+</div>
+
+<!-- full-screen fx overlays -->
+<div id="flash" class="ov flash"></div>
+<div id="pulse" class="ov pulse"></div>
+<div id="boostVeil" class="ov boostveil"></div>
+<div id="lowAir" class="ov lowair"></div>
+<div id="stallOv" class="ov stall"></div>
+
+<!-- HUD -->
+<div class="hud" id="hud" hidden>
+  <div class="hud-tl">
+    <span class="ptag" id="ptag" hidden>P1</span>
+    <div class="score" id="score">0</div>
+    <div class="combo" id="combo"><b id="comboX">×1.0</b><span>COMBO</span><i><u id="comboBar"></u></i></div>
+    <div class="dist" id="dist">0 m</div>
+    <div class="lives" id="lives"></div>
+  </div>
+  <div class="hud-tc">
+    <div class="zone"><span id="zoneName">CH1</span><div class="zbar"><b id="zoneFill"></b></div><span id="zoneNext" class="znext"></span></div>
+    <div class="mission" id="mission"></div>
+  </div>
+  <div class="hud-tr">
+    <button id="pauseBtn" class="ibtn" aria-label="一時停止"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+    <button id="muteBtn" class="ibtn" aria-label="音のオンオフ"><svg viewBox="0 0 24 24" id="muteIco"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  </div>
+
+  <div class="alttrack" id="altTrack" aria-hidden="true">
+    <span class="alt-cap">2600m</span>
+    <div class="alt-rail"><div id="altTicks"></div><b class="alt-marker" id="altMarker"><em id="altNum">0m</em></b></div>
+    <span class="alt-cap">海抜0m</span>
+  </div>
+  <div class="jbanner" id="jbanner" aria-live="polite"><div class="jb-title" id="jbTitle"></div><div class="jb-map" id="jbMap"></div></div>
+  <div class="radar" id="radar"></div>
+  <div class="redline" id="redline">REDLINE <b>×2</b></div>
+  <div class="jumpdist" id="jumpDist"><span class="jd-cap">飛距離</span><b id="jdNum">0.0</b><i>m</i><small id="jdK">K 0m</small></div>
+  <div class="toast" id="toast" aria-live="polite"><b id="toastBig"></b><small id="toastSmall"></small></div>
+  <div class="lights" id="lights" hidden><i></i><i></i><i></i><i class="go"></i></div>
+  <div class="hint" id="hint"></div>
+  <div class="popups" id="popups"></div>
+
+  <div class="cluster" id="cluster">
+    <div class="gauge speed">
+      <svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="50" pathLength="100"/><circle class="val" id="spdArc" cx="60" cy="60" r="50" pathLength="100"/></svg>
+      <div class="gv"><b id="spd">0</b><span>km/h</span><em id="gear">G1</em></div>
+    </div>
+    <div class="grip" id="grip" aria-hidden="true"><i><b id="gripFill"></b></i><span>GRIP</span></div>
+    <div class="gauge air" id="airGauge">
+      <svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="50" pathLength="100"/><circle class="val" id="airArc" cx="60" cy="60" r="50" pathLength="100"/></svg>
+      <div class="gv"><b id="airPct">100</b><span>AIR %</span><em id="alt">ALT 0.0m</em></div>
+    </div>
+  </div>
+</div>
+
+<!-- touch controls -->
+<div class="touch" id="touch" hidden>
+  <div class="tzone left" id="tzLeft"><span class="tlabel">ここを左右にスライド<br>でハンドル</span></div>
+  <div class="stick" id="stick" hidden><i id="knob"></i></div>
+  <div class="tzone right" id="tzRight"></div>
+  <button class="tbtn boost" id="boostBtn" aria-label="ブースト"><svg viewBox="0 0 24 24"><path d="M4 12h9M9 7l5 5-5 5M14 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><small>BOOST</small></button>
+  <button class="tbtn thrust" id="thrustBtn" aria-label="噴射"><svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="56" pathLength="100" id="thrRing"/></svg><span id="thrLabel">噴射</span><small>HOLD</small></button>
+</div>
+
+<!-- title -->
+<section class="screen" id="title" hidden>
+  <div class="card title-card">
+    <svg class="logo" viewBox="0 0 640 230" role="img" aria-label="天空ドロップ・ロードスター">
+      <defs>
+        <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6e0"/><stop offset=".5" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff7a4a"/></linearGradient>
+        <linearGradient id="lg2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7cffe6"/><stop offset=".55" stop-color="#58d6ff"/><stop offset="1" stop-color="#ff4f8b"/></linearGradient>
+        <linearGradient id="lg3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff4f8b"/><stop offset="1" stop-color="#ff4f8b" stop-opacity="0"/></linearGradient>
+        <filter id="gl" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <!-- the cliff: a plateau, the edge, the road falling down the face and kicking out -->
+      <path d="M6 30 L52 30 L52 222 L6 222 Z" fill="#2a1f3a" opacity=".9"/>
+      <path d="M4 26 L44 26 Q60 26 60 42 L60 178 Q60 204 90 204" fill="none" stroke="url(#lg2)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="96" cy="200" r="5" fill="#ffd27a" filter="url(#gl)"/>
+      <g opacity=".85"><rect x="72" y="58" width="3" height="90" fill="url(#lg3)"/><rect x="80" y="40" width="2" height="70" fill="url(#lg3)"/></g>
+      <g transform="skewX(-12)" filter="url(#gl)">
+        <text x="140" y="104" font-family="Orbitron,'Arial Black',sans-serif" font-weight="900" font-size="88" fill="url(#lg1)" letter-spacing="2">SKYDROP</text>
+      </g>
+      <g transform="skewX(-12)">
+        <text x="166" y="158" font-family="Orbitron,'Arial Black',sans-serif" font-weight="800" font-size="44" fill="none" stroke="url(#lg2)" stroke-width="2.2" letter-spacing="10">ROADSTER</text>
+      </g>
+      <text x="150" y="208" font-family="'Dela Gothic One','Hiragino Sans',sans-serif" font-size="29" fill="#f4ecff" letter-spacing="6">天空ドロップ・ロードスター</text>
+      <g transform="translate(560,26)"><rect x="-14" y="-18" width="84" height="26" rx="5" fill="url(#lg2)"/><text x="28" y="1" text-anchor="middle" font-family="Orbitron,sans-serif" font-weight="900" font-size="14" fill="#06202a" letter-spacing="1">2600m</text></g>
+    </svg>
+    <p class="lead">標高2600m、星の頂。<strong>崖の縁からドロップインして、垂直の壁を駆け降りろ。</strong><br>重力で加速し続ける壁を、噴射ブレーキで限界ギリギリに操り、<br>ふもとのジャンプ台から空へ。<strong>雲海を突き破り、海抜0mの夕陽の港へ帰還せよ。</strong></p>
+
+    <div class="row"><span class="lbl">JOURNEY MAP · 出発地点を選ぶ</span>
+      <div class="jmap" id="jmap"></div>
+      <div class="chapinfo" id="chapInfo"></div>
+    </div>
+    <button class="go" id="startBtn"><span>星の頂から、発進</span><svg viewBox="0 0 24 24"><path d="M5 5L19 19M19 9v10H9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+    <div class="best" id="bestLine"></div>
+
+    <div class="row"><span class="lbl">ボディカラー</span><div class="swatches" id="paintSeg"></div></div>
+    <div class="row"><span class="lbl">むずかしさ</span>
+      <div class="seg" id="diffSeg">
+        <button data-v="easy" aria-pressed="false">かんたん</button><button data-v="normal" aria-pressed="true">ふつう</button><button data-v="hard" aria-pressed="false">むずかしい</button>
+      </div>
+    </div>
+    <div class="row"><span class="lbl">プレイ人数</span>
+      <div class="seg" id="modeSeg">
+        <button data-v="1" aria-pressed="true">ひとり</button><button data-v="2" aria-pressed="false">2人交代</button><button data-v="3" aria-pressed="false">3人</button><button data-v="4" aria-pressed="false">4人</button>
+      </div>
+    </div>
+
+    <details class="howto" id="howto">
+      <summary>操作方法 ／ 遊び方</summary>
+      <div class="howgrid">
+        <div class="hcol">
+          <h3>キーボード / パッド</h3>
+          <dl class="keys">
+            <dt><kbd>Space</kbd><kbd>↑</kbd><kbd>W</kbd></dt><dd><b>噴射</b>（地上でジャンプ、空中で上昇・減速、<b>壁ではブレーキ</b>）</dd>
+            <dt><kbd>←</kbd><kbd>→</kbd><kbd>A</kbd><kbd>D</kbd></dt><dd>ハンドル（壁の上でも車線変更できる）</dd>
+            <dt><kbd>Shift</kbd><kbd>X</kbd></dt><dd><b>ブースト</b>（AIRで加速。ジャンプ台の手前で使うと飛距離が伸びる）</dd>
+            <dt><kbd>P</kbd><kbd>Esc</kbd></dt><dd>一時停止</dd>
+            <dt>🎮</dt><dd>スティック：ハンドル ／ A：噴射 ／ RT・X：ブースト</dd>
+          </dl>
+        </div>
+        <div class="hcol">
+          <h3>スマホ</h3>
+          <div class="touchdiag">
+            <div class="td-l">画面の左側<br><b>左右にスライド</b><br>ハンドル</div>
+            <div class="td-r">右下の<b>噴射</b>を長押し<br>（壁では<b>ブレーキ</b>）<br>上の<b>BOOST</b>で加速</div>
+          </div>
+        </div>
+      </div>
+      <ul class="tips">
+        <li><b>崖の縁</b>に着いたらそのまま進むと、タイヤが壁に吸い付いて<b>垂直に駆け降り</b>始めます（ドロップイン）。</li>
+        <li>壁では重力で<b>どんどん加速</b>。<b>噴射でブレーキ</b>。速度計が赤い<span class="g">REDLINE</span>ならスコア2倍、超えたままだと<span class="r">グリップ限界で剥がれる</span>。</li>
+        <li><b>落石は背後から</b>。車線を変えるか、加速して振り切れ。岩棚は車線変更でかわす。氷の上はブレーキが効かない。</li>
+        <li>ふもとの<b>ジャンプ台</b>から空へ。<b>K点</b>を越えて着地斜面に降りよう。着地の直前に<b>噴射</b>でソフトランディング。</li>
+        <li>各チャプター ★3つ：着地成功／ノーミス／K点越え。</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<!-- pause -->
+<section class="screen" id="pause" hidden>
+  <div class="card">
+    <h2>ひと息、つこう。下はまだ遠い。</h2>
+    <label class="setting"><span>BGM</span><input id="musicVol" type="range" min="0" max="100" value="60"></label>
+    <label class="setting"><span>効果音</span><input id="sfxVol" type="range" min="0" max="100" value="80"></label>
+    <div class="setting"><span>画質</span>
+      <div class="seg small" id="qualSeg"><button data-v="auto">自動</button><button data-v="high">高</button><button data-v="mid">中</button><button data-v="low">低</button></div>
+    </div>
+    <label class="setting"><span>着地点ガイド</span><input type="checkbox" id="guideChk" checked></label>
+    <label class="setting"><span>揺れ・フラッシュを控えめに</span><input type="checkbox" id="motionChk"></label>
+    <div class="btns">
+      <button class="go" id="resumeBtn"><span>つづける</span></button>
+      <button class="ghost" id="restartBtn">はじめから</button>
+      <button class="ghost" id="quitBtn">タイトルへ戻る</button>
+    </div>
+  </div>
+</section>
+
+<!-- result -->
+<section class="screen" id="result" hidden>
+  <div class="card result-card">
+    <div class="res-head">
+      <div class="grade" id="grade">A</div>
+      <div><span class="eyebrow" id="resEyebrow">RUN COMPLETE</span><h2 id="resTitle">結果</h2></div>
+    </div>
+    <div class="jmap small" id="rmap"></div>
+    <p class="lead" id="debrief"></p>
+    <dl class="stats" id="resStats"></dl>
+    <ol class="rank" id="rank" hidden></ol>
+    <div class="btns">
+      <button class="go" id="nextBtn"><span>もう一回</span></button>
+      <button class="go alt" id="retryBtn" hidden><span>このチャプターから再挑戦</span></button>
+      <button class="ghost" id="homeBtn">タイトルへ戻る</button>
+    </div>
+  </div>
+</section>
+
+<noscript><div class="card" style="margin:40px auto">JavaScriptを有効にしてください。</div></noscript>
+
+<script src="js/vendor/three.min.js"></script>
+<script src="js/vendor/three-extras.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/models.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/world.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
