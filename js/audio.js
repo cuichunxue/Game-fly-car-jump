@@ -233,6 +233,7 @@ TR.Audio = (() => {
         noiseHit(t, 2.6, .3, 1200, 'bandpass', .5, 2600, { verb: .7, att: .4 }); tone(43, t, 1.8, 'sine', .6, 30);
         break;
       }
+      case 'dive': noiseHit(t, 1.1, .5, 5000, 'bandpass', 1, 350, { pan: -.4, pan2: .4, verb: .3 }); tone(220, t, .9, 'sine', .22, 55, { verb: .3 }); break;
       case 'squeal': noiseHit(t, .14, .12 + v * .18, 3200 + Math.random() * 1600, 'bandpass', 6, 0, { pan: (Math.random() - .5) * .8 }); break;
       case 'redline': tone(1760, t, .07, 'square', .06); tone(1320, t + .08, .07, 'square', .05); tone(60, t, .14, 'sine', .4, 40); break;
       case 'clamp':   // tires bite into the wall: metal clunk + rising whoosh

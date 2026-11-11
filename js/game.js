@@ -26,7 +26,7 @@ const PH = { G: 22, JUMP: 9.6, THRUST: 36, CUSHION: 18, VYMAX: 10.5, CEIL0: 8, C
   LAT: 12.5, CAR_HW: .95, CAR_HL: 2.25, CRASH_V: 21.5, PERFECT_V: 7.5, HARD_V: 13.5, COYOTE: .16,
   // the wall: gravity pull, air drag, retro-brake, boost, speed cap, redline band, pad kick, brake on ice
   FALL: .8, DRAG: .0022, BRAKE: 1.05, WALL_BOOST: .5, VMAX_W: 84, REDLINE: .86, PAD_KICK: 9, ICE_BRAKE: .5,
-  JCEIL0: 4, JCEIL1: 24, JTHRUST: 12, CUSHION_J: .75 };
+  JCEIL0: 4, JCEIL1: 24, JTHRUST: 12, CUSHION_J: .75, SLOPE_G: .55 };
 const QUAL = {
   high: { dpr: 2,   shadow: 2048, bloom: true,  bloomScale: 1,  msaa: true },
   mid:  { dpr: 1.5, shadow: 1024, bloom: true,  bloomScale: .6, msaa: false },
@@ -284,7 +284,7 @@ function startRun(fromCh = S.startCh){
     score: 0, dist: 0, rings: 0, perfects: 0, rolls: 0, nearMiss: 0, maxAir: 0, airTime: 0, combo: 0, comboT: 0, maxMult: 1,
     crashT: 0, invuln: 0, lastG: 1, roll: 0, rollDir: 0, rolling: false, steerHold: 0, flightRings: 0, fold: 0, thrustNow: 0, boostNow: false,
     chapter: fromCh, hints: S.hints || {}, lastReason: '', shake: 0, slowmo: 0, slowmo2: 0, timeScale: 1, scrapeT: 0, bigAirs: 0, lastSlope: 0, emptyWarned: false, predKind: -1,
-    time: 0, minAlt: base, drops: 0, airDrops: 0, dodges: 0, chCrash: CH.map(() => 0), summitT: 0, dropInT: 0, heartT: 0, squealT: 0,
+    time: 0, diveT: 0, minAlt: base, drops: 0, airDrops: 0, dodges: 0, chCrash: CH.map(() => 0), summitT: 0, dropInT: 0, heartT: 0, squealT: 0,
     grip: 1, over: false, redline: false, redT: 0, jcharge: 0, maxV: 0, bestJump: 0, kpoints: 0, jumpFrom: null, jumpK: 0, lastDrop: null,
     cloudDone: base < W.CLOUD_Y, goal: false, goalT: 0, fwT: 0, onIce: false, iceWarned: false, rockWarnT: 0, rockWarnLane: 0, crashOnDrop: false, reachedCh: fromCh,
   });
@@ -545,13 +545,19 @@ function step(dt){
   if (S.invuln > 0) S.invuln -= dt;
   if (S.comboT > 0){ S.comboT -= dt; if (S.comboT <= 0) comboBreak(); }
   if (S.dropInT > 0) S.dropInT -= dt;
+  if (S.diveT > 0) S.diveT -= dt;
 
   /* speed & boost */
   const boosting = input.boost && S.air > 0.5 && !S.detached;
   if (boosting) S.air = Math.max(0, S.air - PH.BOOST_DRAIN * dt);
   if (S.on !== 'wall'){
     const target = W.speedAt(S.z) * (boosting ? PH.BOOST : 1);
-    if (S.on === 'road') S.speed = damp(S.speed, target, S.speed < target ? (boosting ? 2.6 : 1.2) : (S.lastSlope < -.1 ? .15 : 1.0), dt);
+    if (S.on === 'road'){
+      // slopes: gravity pulls you down a dive and bleeds speed on a climb; momentum is kept, not damped away
+      const sl = S.lastSlope || 0;
+      S.speed = damp(S.speed, target, S.speed < target ? (boosting ? 2.6 : 1.2) : (sl < -.1 ? .15 : sl > .1 ? .3 : .7), dt);
+      if (sl) S.speed = Math.max(target * .8, S.speed - PH.G * PH.SLOPE_G * sl / Math.sqrt(1 + sl * sl) * dt);
+    }
     else if (S.speed > 0) S.speed = damp(S.speed, target, boosting ? 1.4 : (S.jumpFrom ? 0 : .25), dt);  // airborne: momentum carries
   }
   S.boostNow = boosting;
@@ -701,8 +707,17 @@ function roadAirStep(dt, thrust, pressed, boosting, prevY){
     const fl = W.floorAt(S.z, S.x);
     if (!fl || fl.h < S.y - .35 - Math.max(0, -fl.slope) * S.speed * dt){
       S.on = 'air'; S.grounded = false; S.airTime = 0; S.flightRings = 0; S.coyote = fl ? 0 : PH.COYOTE;
-      if (S.lastSlope > 0){ AU.sfx('jump'); once('rampTip', () => hint('ジャンプ台！ 空中で<b>長押し</b>するとさらに伸びる', 2.5)); }
+      S.lastSlope = S.lastSlope > 0 ? S.lastSlope : 0;
+      if (S.lastSlope > 0){ AU.sfx('jump'); S.lastSlope = 0; once('rampTip', () => hint('ジャンプ台！ 空中で<b>長押し</b>するとさらに伸びる', 2.5)); }
     } else {
+      const ds = fl.slope - (S.lastSlope || 0);
+      if (ds > .25){        // the bottom of a dive / foot of a climb: compression
+        S.shake = Math.max(S.shake, .45); landKick = settings.motion ? 0 : .28; AU.sfx('land', .45); vibrate(25);
+        FX.sparks(S.x, fl.h + .1, S.z, S.speed * .5, 8, 0); FX.groundDust(S.x, fl.h, S.z, S.speed * .5);
+      } else if (ds < -.4){ // tipping over into a dive
+        AU.sfx('dive'); S.diveT = 1; pulse();
+        once('dive', () => toast('急降下!', '重力で加速 · 谷底のパッドを踏んで、向こうの頂から跳べ', 1.4, 'gold', 2));
+      }
       S.y = fl.h; S.vy = S.speed * fl.slope; S.refBase = fl.seg.base; S.lastSlope = fl.slope;
       if (!boosting) S.air = Math.min(100, S.air + D.recharge * dt);
       if (pressed && S.air > 0){
@@ -878,7 +893,7 @@ function land(f){
   S.lastG = g;
   if (impact > PH.CRASH_V){ S.y = f.h; crash((c ? '着地失敗! ' : '激突! ') + g.toFixed(1) + 'G', true); return; }
   S.y = f.h; S.grounded = true; S.on = 'road'; S.refBase = f.seg.base;
-  const at = S.airTime; S.vy = S.speed * (f.slope || 0); S.jumpFrom = null; S.detached = false;
+  const at = S.airTime; S.vy = S.speed * (f.slope || 0); S.jumpFrom = null; S.detached = false; S.lastSlope = f.slope || 0;
   const rollInc = S.rolling; if (S.rolling){ S.rolling = false; S.roll = 0; }
   const kk = clamp(impact / PH.CRASH_V, 0, 1);
   AU.sfx('land', kk); S.shake = Math.max(S.shake, kk * .9); landKick = settings.motion ? 0 : Math.min(.35, impact * .02);
@@ -940,6 +955,8 @@ function radar(){
   else if (S.on === 'air' && S.predKind === 1 && S.vy < -3) { txt = '↓ 着地前に噴射'; cls = ''; }
   else if (S.on === 'air' && S.predKind === 0 && S.vy < -2) { txt = '✓ 着地OK'; cls = 'good'; }
   else if (S.on === 'road' && toEdge < 260 && toEdge > 0){ txt = '▼ 崖まで ' + Math.ceil(toEdge) + 'm — ドロップイン!'; cls = toEdge < 60 ? 'danger' : ''; }
+  else if (S.on === 'road' && (S.lastSlope || 0) < -.3){ txt = '▼ 急降下 — 谷底のパッドを狙え!'; cls = 'good'; }
+  else if (S.on === 'road' && (S.lastSlope || 0) > .2){ txt = '▲ 頂でジャンプ! 着地前に噴射'; cls = ''; }
   else if (gap && S.on === 'road'){
     const d = Math.ceil(gap.z0 - S.z), up = gap.base > gap.takeoffBase + .5;
     txt = '▲ 谷まで ' + d + 'm' + (up ? ' · 上り!' : '') + (d < S.speed * .7 ? ' — 今だ、噴射!' : ''); cls = d < S.speed * .7 ? 'danger' : '';
@@ -1019,8 +1036,8 @@ let camRoll = 0;
 const camT = new THREE.Vector3(), camN = new THREE.Vector3(), camDesired = new THREE.Vector3(), camUp = new THREE.Vector3(), camLook = new THREE.Vector3();
 function camFollow(dt){
   const onWall = S.on === 'wall';
-  const thT = onWall ? S.th : S.on === 'air' && S.summitT > 0 ? camTh : 0;
-  camTh = damp(camTh, thT, onWall ? 7 : 2.4, dt);
+  const thT = onWall ? S.th : S.on === 'air' && S.summitT > 0 ? camTh : S.on === 'road' ? Math.atan(S.lastSlope || 0) * .85 : 0;
+  camTh = damp(camTh, thT, onWall ? 7 : S.on === 'road' ? 5 : 2.4, dt);
   surfaceT(camTh, camT); surfaceN(camTh, camN);
   const steep = clamp(-Math.sin(camTh), 0, 1);
   const air = S.on === 'air' ? clamp(S.y - S.refBase, 0, 14) : 0;
@@ -1051,7 +1068,7 @@ function camFollow(dt){
   camera.up.copy(camUp);
   camera.lookAt(camLook);
   camRoll = damp(camRoll, settings.motion ? 0 : S.vx * .009, 5, dt); camera.rotateZ(camRoll);
-  const fov = baseFov + clamp(sp - 22, 0, 45) * .42 + (S.boostNow ? 9 : 0) + (S.thrustNow && S.on === 'air' ? 3 : 0) + (S.summitT > 0 ? 6 : 0) + (S.dropInT > 0 ? 8 * smooth(0, .5, S.dropInT) : 0);
+  const fov = baseFov + clamp(sp - 22, 0, 45) * .42 + (S.boostNow ? 9 : 0) + (S.thrustNow && S.on === 'air' ? 3 : 0) + (S.summitT > 0 ? 6 : 0) + (S.dropInT > 0 ? 8 * smooth(0, .5, S.dropInT) : 0) + (S.diveT > 0 ? 7 * S.diveT : 0);
   camera.fov = damp(camera.fov, Math.min(104, fov), 3, dt); camera.updateProjectionMatrix();
   motionDir.copy(onWall ? camT : FWD);
   followEnv();

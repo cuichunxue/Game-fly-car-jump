@@ -22,17 +22,17 @@ TR.World = (() => {
 
   /* ---------- chapters (the journey down) ---------- */
   const CHAPTERS = [
-    { key: 'summit', name: 'STAR SUMMIT',     jp: '星の頂',       scen: 'sky',    mat: 'ice',   v: 24, road: 420, obst: .35, gap: .22, wallH: 90,  chasm: 30,
+    { key: 'summit', name: 'STAR SUMMIT',     jp: '星の頂',       scen: 'sky',    mat: 'ice',   v: 28, road: 460, obst: .35, gap: .22, wallH: 90,  chasm: 30,
       wall: { rocks: 0, blockers: 0, ice: 0, pads: 1, cells: 1 }, goal: '星空の縁から、最初のドロップ。' },
-    { key: 'aurora', name: 'AURORA ICE WALL', jp: 'オーロラ氷壁', scen: 'sky',    mat: 'ice',   v: 28, road: 560, obst: .55, gap: .28, wallH: 150, chasm: 34,
+    { key: 'aurora', name: 'AURORA ICE WALL', jp: 'オーロラ氷壁', scen: 'sky',    mat: 'ice',   v: 32, road: 600, obst: .55, gap: .28, wallH: 150, chasm: 34,
       wall: { rocks: 1, blockers: 1, ice: 2, pads: 2, cells: 2 }, goal: '氷の上ではブレーキが効かない。' },
-    { key: 'clouds', name: 'SEA OF CLOUDS',   jp: '雲海ダイブ',   scen: 'peaks',  mat: 'rock',  v: 31, road: 640, obst: .65, gap: .3,  wallH: 220, chasm: 38,
+    { key: 'clouds', name: 'SEA OF CLOUDS',   jp: '雲海ダイブ',   scen: 'peaks',  mat: 'rock',  v: 35, road: 680, obst: .65, gap: .3,  wallH: 220, chasm: 38,
       wall: { rocks: 2, blockers: 1, ice: 0, pads: 2, cells: 2 }, goal: '雲を突き破って、地上へ。' },
-    { key: 'city',   name: 'NEON SKYWALL',    jp: 'ネオン摩天楼', scen: 'city',   mat: 'tower', v: 34, road: 700, obst: .7,  gap: .3,  wallH: 290, chasm: 42,
+    { key: 'city',   name: 'NEON SKYWALL',    jp: 'ネオン摩天楼', scen: 'city',   mat: 'tower', v: 38, road: 740, obst: .7,  gap: .3,  wallH: 290, chasm: 42,
       wall: { rocks: 1, blockers: 4, ice: 0, pads: 3, cells: 2 }, goal: '屋上から、ビルの壁面を駆け降りろ。' },
-    { key: 'canyon', name: 'RED CANYON',      jp: '赤岩キャニオン', scen: 'canyon', mat: 'rock', v: 37, road: 720, obst: .75, gap: .34, wallH: 360, chasm: 46,
+    { key: 'canyon', name: 'RED CANYON',      jp: '赤岩キャニオン', scen: 'canyon', mat: 'rock', v: 41, road: 760, obst: .75, gap: .34, wallH: 360, chasm: 46,
       wall: { rocks: 4, blockers: 2, ice: 0, pads: 3, cells: 3 }, goal: '落石は、背後から追ってくる。' },
-    { key: 'coast',  name: 'GOLDEN COAST',    jp: '黄金の海岸線', scen: 'coast',  mat: 'rock',  v: 40, road: 640, obst: .8,  gap: .36, wallH: 0,   chasm: 52,
+    { key: 'coast',  name: 'GOLDEN COAST',    jp: '黄金の海岸線', scen: 'coast',  mat: 'rock',  v: 44, road: 700, obst: .8,  gap: .36, wallH: 0,   chasm: 52,
       wall: { rocks: 5, blockers: 3, ice: 0, pads: 4, cells: 4 }, goal: '最後の大落下。夕陽の海へ。' },
   ];
 
@@ -608,6 +608,40 @@ TR.World = (() => {
   }
   function chasmOf(drop){ for (const s of segs) if (s.type === 'chasm' && s.drop === drop) return s; return segs[segs.length - 1]; }
 
+  /* ---------- sloped road: steep dives and climbs between the plateaus' flat stretches ---------- */
+  function makeSlope(k, len, y1, gb){
+    const y0 = lastBase();
+    const seg = newSeg('slope', len, { base: y1, chapter: k });
+    seg.takeoffBase = y0; seg.h = y1 - y0; seg.safe = true; if (gb !== undefined) seg.gb = gb;
+    const g = seg.group, Mt = Md.mats(), B = new Batch(), z0 = seg.z0, z1 = seg.z1, zc = (z0 + z1) / 2;
+    const ang = Math.atan2(y1 - y0, len), L = Math.hypot(len, y1 - y0), yc = (y0 + y1) / 2, down = y1 < y0;
+    const rp = roadPlane(L); B.add(rp, Mt.road, 0, yc, zc, -ang); rp.dispose();
+    for (const s of [-1, 1]){
+      B.add(UNIT_BOX, Mt.concrete, s * (HALF_W + .25), yc + .42, zc, -ang, 0, 0, .5, .85, L);
+      B.add(UNIT_BOX, down ? Mt.pinkGlow : Mt.cyanGlow, s * (HALF_W - .02), yc + .5, zc, -ang, 0, 0, .05, .08, L);
+    }
+    // chevrons painted across the slope so its steepness reads at speed
+    for (let d = 6; d < L - 4; d += 12) B.add(UNIT_BOX, down ? Mt.amberGlow : Mt.whiteGlow, 0, y0 + (y1 - y0) * d / L + .03, z0 + len * d / L, -ang, 0, 0, HALF_W * 2 - 1, .04, .35);
+    B.raw(fillShape([[z0, y0 - .05], [z1, y1 - .05], [z1, y1 - 3], [z0, y0 - 3]], HALF_W + .5), Mt.concrete);
+    const bottom = supportBottom(Math.min(y0, y1));
+    for (let zz = z0 + 10; zz < z1 - 4; zz += 30){ const yy = y0 + (y1 - y0) * (zz - z0) / len - 2; B.box(2.6, yy - bottom, 2.6, Mt.concrete, 0, (yy + bottom) / 2, zz); }
+    B.build(g, false, true);
+    return pushSeg(seg);
+  }
+  // the roller: dive into a valley, hit the pad at the bottom, charge up the far side and fly off the crest
+  function rollerSeg(k, prog){
+    const base = lastBase(), deep = Math.round(18 + prog * 16), sD = .62 + prog * .16, sU = .32;
+    const prev = segs[segs.length - 1];
+    if (prev.type === 'flat' && prev.z1 - prev.z0 > 60) addGantry(prev, prev.z1 - 40, ['▼ DIVE', '急降下 ' + deep + 'm · そのまま突っ込め'], 'amber');
+    const d = makeSlope(k, deep / sD, base - deep, base);
+    for (let i = 0; i < 3; i++){ const t = (i + 1) / 4; addRing(d, 0, base - deep * t + 1.6, d.z0 + (d.z1 - d.z0) * t, -Math.atan(sD)); }
+    const b = makeSeg('flat', 34, { safe: true, chapter: k }); b.gb = base;
+    addPad(b, 0, b.z0 + 8, 9); addCell(b, pick([-3.6, 3.6]), b.base + 1, b.z0 + 22);
+    const u = makeSlope(k, deep / sU, base, base);
+    for (let i = 0; i < 4; i++) addRing(u, 0, base + 2 + Math.sin((i + 1) / 5 * Math.PI) * 3.4, u.z1 + 6 + i * 9);
+    return u;
+  }
+
   /* ---------- generation: a plan of segment builders, executed lazily ---------- */
   function speedAt(z){ const k = chapterAt(z); return CHAPTERS[k].v * diff.vk; }
   function gapSeg(k, v, prog, fromRamp){
@@ -680,20 +714,22 @@ TR.World = (() => {
       });
     }
     // the road
-    let roadLeft = C.road;
+    let roadLeft = C.road, nRoad = 0;
     const road = () => {
       const last = segs[segs.length - 1], v = CHAPTERS[k].v * diff.vk;
       if (last.type === 'ramp' && last.leadsGap){ gapSeg(k, v, prog, true); return; }
-      if (last.type === 'gap' || last.type === 'ramp'){ flatSeg(k, rand(48, 70), prog, true); return; }
+      if (last.type === 'gap' || last.type === 'ramp' || last.type === 'slope'){ flatSeg(k, rand(60, 80), prog, true); return; }
       const r = Math.random();
-      if (r < C.gap) gapSeg(k, v, prog, false);
+      // every chapter opens with a roller; after that they come at random
+      if (nRoad++ === 0 || r > .78) rollerSeg(k, prog);
+      else if (r < C.gap) gapSeg(k, v, prog, false);
       else if (r < C.gap + .14){ const s = makeSeg('ramp', 18, { h: 3.2, chapter: k }); s.leadsGap = Math.random() < .65; }
       else flatSeg(k, rand(70, 120), prog, false);
     };
     P.push(function roadStep(){
       const z0 = buildZ; road(); roadLeft -= buildZ - z0;
       const last = segs[segs.length - 1];
-      if (roadLeft > 0 || last.type === 'gap' || last.type === 'ramp') plan.unshift(roadStep);
+      if (roadLeft > 0 || last.type === 'gap' || last.type === 'ramp' || last.type === 'slope') plan.unshift(roadStep);
     });
     // run-up to the edge: calm, AIR cells, warning gantries
     P.push(() => {
@@ -849,7 +885,7 @@ TR.World = (() => {
       if (z >= s.z0 && z < s.z1){
         if (s.type === 'flat') return { h: s.base, slope: 0, seg: s };
         if (s.type === 'ramp') return { h: s.base + s.h * (z - s.z0) / (s.z1 - s.z0), slope: s.h / (s.z1 - s.z0), seg: s };
-        if (s.type === 'hill') return { h: s.takeoffBase + s.h * (z - s.z0) / (s.z1 - s.z0), slope: s.h / (s.z1 - s.z0), seg: s };
+        if (s.type === 'hill' || s.type === 'slope') return { h: s.takeoffBase + s.h * (z - s.z0) / (s.z1 - s.z0), slope: s.h / (s.z1 - s.z0), seg: s };
         return null;
       }
     }
