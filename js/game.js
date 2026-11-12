@@ -26,7 +26,7 @@ const PH = { G: 22, JUMP: 9.6, THRUST: 36, CUSHION: 18, VYMAX: 10.5, CEIL0: 8, C
   LAT: 12.5, CAR_HW: .95, CAR_HL: 2.25, CRASH_V: 21.5, PERFECT_V: 7.5, HARD_V: 13.5, COYOTE: .16,
   // the wall: gravity pull, air drag, retro-brake, boost, speed cap, redline band, pad kick, brake on ice
   FALL: .8, DRAG: .0022, BRAKE: 1.05, WALL_BOOST: .5, VMAX_W: 84, REDLINE: .86, PAD_KICK: 9, ICE_BRAKE: .5,
-  JCEIL0: 4, JCEIL1: 24, JTHRUST: 12, CUSHION_J: .75, SLOPE_G: .55 };
+  JCEIL0: 4, JCEIL1: 24, JTHRUST: 12, CUSHION_J: .75, SLOPE_G: .85, CREST_VY: 12 };
 const QUAL = {
   high: { dpr: 2,   shadow: 2048, bloom: true,  bloomScale: 1,  msaa: true },
   mid:  { dpr: 1.5, shadow: 1024, bloom: true,  bloomScale: .6, msaa: false },
@@ -555,7 +555,7 @@ function step(dt){
     if (S.on === 'road'){
       // slopes: gravity pulls you down a dive and bleeds speed on a climb; momentum is kept, not damped away
       const sl = S.lastSlope || 0;
-      S.speed = damp(S.speed, target, S.speed < target ? (boosting ? 2.6 : 1.2) : (sl < -.1 ? .15 : sl > .1 ? .3 : .7), dt);
+      S.speed = damp(S.speed, target, S.speed < target ? (boosting ? 2.6 : 1.2) : (sl < -.1 ? .05 : sl > .1 ? .3 : .6), dt);
       if (sl) S.speed = Math.max(target * .8, S.speed - PH.G * PH.SLOPE_G * sl / Math.sqrt(1 + sl * sl) * dt);
     }
     else if (S.speed > 0) S.speed = damp(S.speed, target, boosting ? 1.4 : (S.jumpFrom ? 0 : .25), dt);  // airborne: momentum carries
@@ -632,7 +632,7 @@ function step(dt){
     if (S.on === 'road' && S.grounded){
       for (const p of s.pads){
         if (!p.used && S.z >= p.z0 && S.z <= p.z1 && Math.abs(S.x - p.x) < 2){
-          p.used = true; S.speed = Math.min(S.speed + PH.PAD_KICK, 58); AU.sfx('pad'); pulse(); popup('BOOST!', 'cyan'); S.shake = Math.max(S.shake, .25);
+          p.used = true; S.speed = Math.max(S.speed, Math.min(S.speed + PH.PAD_KICK, 72)); AU.sfx('pad'); pulse(); popup('BOOST!', 'cyan'); S.shake = Math.max(S.shake, .25);
           for (let k = 0; k < 14; k++) FX.boostFlame(S.x + rand(-1, 1), S.y + .3, S.z - 2, -10);
         }
       }
@@ -709,6 +709,12 @@ function roadAirStep(dt, thrust, pressed, boosting, prevY){
       S.on = 'air'; S.grounded = false; S.airTime = 0; S.flightRings = 0; S.coyote = fl ? 0 : PH.COYOTE;
       S.lastSlope = S.lastSlope > 0 ? S.lastSlope : 0;
       if (S.lastSlope > 0){ AU.sfx('jump'); S.lastSlope = 0; once('rampTip', () => hint('ジャンプ台！ 空中で<b>長押し</b>するとさらに伸びる', 2.5)); }
+    } else if ((S.lastSlope || 0) > .25 && fl.slope < S.lastSlope - .2){
+      // the crest of a climb: the road levels off and the car sails on
+      S.on = 'air'; S.grounded = false; S.airTime = 0; S.flightRings = 0; S.coyote = 0;
+      S.vy = Math.min(S.speed * S.lastSlope, PH.CREST_VY); S.refBase = fl.seg.base; S.lastSlope = 0;
+      AU.sfx('jump'); AU.sfx('roll'); pulse();
+      once('crest', () => toast('クレスト・ジャンプ!', '着地の直前に噴射でパーフェクト', 1.1, 'gold', 1));
     } else {
       const ds = fl.slope - (S.lastSlope || 0);
       if (ds > .25){        // the bottom of a dive / foot of a climb: compression
@@ -750,6 +756,8 @@ function roadAirStep(dt, thrust, pressed, boosting, prevY){
   const vy0 = S.vy;
   S.vy += acc * dt;
   if (thrust && S.vy > PH.VYMAX) S.vy = Math.max(PH.VYMAX, Math.min(S.vy, vy0)); // thrust never adds beyond the cap (launches keep their speed)
+  // downforce over a dive: the car is pulled onto the falling road instead of sailing over the whole slope
+  if (!S.jumpFrom && !S.detached){ const fd = W.floorAt(S.z, S.x); if (fd && fd.seg.type === 'slope' && fd.slope < -.3) S.vy = Math.min(S.vy, damp(S.vy, S.speed * fd.slope - 8, 3, dt)); }
   S.y += S.vy * dt; S.airTime += dt; S.maxAir = Math.max(S.maxAir, S.airTime);
   if (S.detached){ S.fallT -= dt; if (S.fallT <= 0){ crash('壁から剥がれて転落!'); return; } }
   // over a cliff edge while airborne: land on the face (air drop-in)
@@ -765,7 +773,7 @@ function roadAirStep(dt, thrust, pressed, boosting, prevY){
     if (S.detached) crash('壁から剥がれて転落!', true);
     else if (prevY < f2.h - .6) crash(S.jumpFrom ? '届かなかった… 斜面に激突!' : '壁に激突!', true);
     else land(f2);
-  } else if (S.y < S.refBase - 24){ crash(S.detached ? '壁から剥がれて転落!' : '谷へ落下!', true); }
+  } else if (S.y < S.refBase - 24 && (!f2 || S.detached)){ crash(S.detached ? '壁から剥がれて転落!' : '谷へ落下!', true); }  // (over a dive there is road far below: keep flying)
 }
 
 /* ---------- the wall: drop in, fall, brake, take off ---------- */
@@ -1045,6 +1053,7 @@ function camFollow(dt){
   let back = 7.4 + sp * .05 + air * .18 - (S.boostNow ? .8 : 0);
   let height = 2.7 + air * .34 + (S.on === 'air' ? .6 : 0);
   if (onWall){ back += 2.2 * steep; height += 3.4 * steep; }
+  else if (S.on === 'road'){ const tilt = Math.abs(Math.sin(camTh)); height += 2.4 * tilt; back += 1.5 * tilt; }
   // drop-in: rise up and hang over the edge for a moment so the abyss fills the screen
   if (S.dropInT > 0 && !settings.motion){ const k = smooth(1.4, 1.0, S.dropInT) * smooth(0, .6, S.dropInT); height += 5 * k; back += 2 * k; }
   camDesired.copy(camT).multiplyScalar(-back).addScaledVector(camN, height); camDesired.x = -S.x * .22;

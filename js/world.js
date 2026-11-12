@@ -628,17 +628,27 @@ TR.World = (() => {
     B.build(g, false, true);
     return pushSeg(seg);
   }
-  // the roller: dive into a valley, hit the pad at the bottom, charge up the far side and fly off the crest
+  // the roller: a long steep dive into a valley, a boost pad at the bottom, a charge up the far side, a hop off the crest.
+  // above the clouds the valley is simply deeper; where there is ground, the road first climbs a mountain so the dive is just as long.
   function rollerSeg(k, prog){
-    const base = lastBase(), deep = Math.round(18 + prog * 16), sD = .62 + prog * .16, sU = .32;
+    const base = lastBase(), sky = groundLevel(base) === null;
+    const up = sky ? 0 : Math.round(34 + prog * 40), deep = sky ? Math.round(56 + prog * 60) : 36;
+    const sD = .78 + prog * .2, sU = .45;
     const prev = segs[segs.length - 1];
-    if (prev.type === 'flat' && prev.z1 - prev.z0 > 60) addGantry(prev, prev.z1 - 40, ['▼ DIVE', '急降下 ' + deep + 'm · そのまま突っ込め'], 'amber');
-    const d = makeSlope(k, deep / sD, base - deep, base);
-    for (let i = 0; i < 3; i++){ const t = (i + 1) / 4; addRing(d, 0, base - deep * t + 1.6, d.z0 + (d.z1 - d.z0) * t, -Math.atan(sD)); }
-    const b = makeSeg('flat', 34, { safe: true, chapter: k }); b.gb = base;
-    addPad(b, 0, b.z0 + 8, 9); addCell(b, pick([-3.6, 3.6]), b.base + 1, b.z0 + 22);
-    const u = makeSlope(k, deep / sU, base, base);
-    for (let i = 0; i < 4; i++) addRing(u, 0, base + 2 + Math.sin((i + 1) / 5 * Math.PI) * 3.4, u.z1 + 6 + i * 9);
+    if (prev.type === 'flat' && prev.z1 - prev.z0 > 60) addGantry(prev, prev.z1 - 40, [up ? '▲ CLIMB → ▼ DIVE' : '▼ DIVE', '急降下 ' + (up + deep) + 'm · そのまま突っ込め'], 'amber');
+    const climb = (rise, to) => makeSlope(k, rise / sU, to, base);
+    if (up){
+      climb(up, base + up);
+      const c = makeSeg('flat', 44, { safe: true, chapter: k }); c.gb = base;
+      for (let i = 0; i < 3; i++) addRing(c, 0, c.base + 2.2 + Math.sin((i + 1) / 4 * Math.PI) * 2.6, c.z0 + 6 + i * 9);
+    }
+    const d = makeSlope(k, (up + deep) / sD, base - deep, base);
+    const n = Math.max(3, Math.round((up + deep) / 16));
+    for (let i = 0; i < n; i++){ const t = (i + 1) / (n + 1); addRing(d, Math.sin(i * 1.1) * 2.6, d.takeoffBase + d.h * t + 1.6, d.z0 + (d.z1 - d.z0) * t, -Math.atan(sD)); }
+    const b = makeSeg('flat', 46, { safe: true, chapter: k }); b.gb = base;
+    addPad(b, 0, b.z0 + 6, 10); addCell(b, pick([-3.6, 3.6]), b.base + 1, b.z0 + 30);
+    const u = climb(deep, base);
+    for (let i = 0; i < 4; i++) addRing(u, 0, base + 2 + Math.sin((i + 1) / 5 * Math.PI) * 3, u.z1 + 6 + i * 9);
     return u;
   }
 
