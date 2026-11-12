@@ -705,7 +705,8 @@ function roadAirStep(dt, thrust, pressed, boosting, prevY){
     const ds = W.dropStartAt(S.z);
     if (ds){ enterWall(ds, Math.max(0, S.z - ds.z0), S.speed, false); return; }
     const fl = W.floorAt(S.z, S.x);
-    if (!fl || fl.h < S.y - .35 - Math.max(0, -fl.slope) * S.speed * dt){
+    // (the tolerance covers one step of descent on the slope the car is on or has just left: the foot of a dive is not a fall)
+    if (!fl || fl.h < S.y - .35 - Math.max(0, -fl.slope, -(S.lastSlope || 0)) * S.speed * dt * 1.5){
       S.on = 'air'; S.grounded = false; S.airTime = 0; S.flightRings = 0; S.coyote = fl ? 0 : PH.COYOTE;
       S.lastSlope = S.lastSlope > 0 ? S.lastSlope : 0;
       if (S.lastSlope > 0){ AU.sfx('jump'); S.lastSlope = 0; once('rampTip', () => hint('ジャンプ台！ 空中で<b>長押し</b>するとさらに伸びる', 2.5)); }
